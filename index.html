@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>الحوت — منصة التطبيقات</title>
+  <meta name="description" content="تطبيقات إسلامية وخدمية مجانية للتحميل المباشر على أندرويد.">
+  <meta name="theme-color" content="#1346a8">
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="hero">
+    <div class="logo-card"><img src="logo.png" alt="الحوت" class="logo"></div>
+    <h1 class="sr-only">الحوت</h1>
+    <p class="sub">تطبيقات مجانية، حمّلها مباشرة على موبايلك.</p>
+  </header>
+
+  <main>
+    <div class="search-wrap">
+      <input id="search" type="search" placeholder="ابحث عن تطبيق..." aria-label="بحث">
+    </div>
+
+    <section id="apps" class="grid" aria-live="polite"></section>
+    <p id="empty" class="empty" hidden>لا توجد تطبيقات مطابقة للبحث.</p>
+
+    <section class="guide">
+      <h2>طريقة التثبيت على أندرويد</h2>
+      <p class="guide-note">التطبيقات هنا خارج متجر Google Play، فأندرويد هيطلب منك إذن مرة واحدة.</p>
+      <ol>
+        <li>اضغط زر <strong>تحميل APK</strong> من المتصفح (يفضّل Chrome).</li>
+        <li>لو ظهر تحذير "هذا النوع من الملفات قد يضر جهازك" اختر <strong>تنزيل على أي حال</strong>.</li>
+        <li>افتح الملف بعد التنزيل، ولو طلب إذن اسمح بـ <strong>التثبيت من هذا المصدر</strong>.</li>
+        <li>لو ظهرت رسالة Play Protect اختر <strong>تثبيت على أي حال</strong>.</li>
+        <li>افتح التطبيق وابدأ الاستخدام.</li>
+      </ol>
+      <p class="guide-note">التحديثات: نزّل الإصدار الأحدث من هنا وثبّته فوق القديم، وبياناتك هتفضل زي ما هي.</p>
+    </section>
+    <section class="guide" id="support" hidden>
+      <h2>ادعم المنصة 🤍</h2>
+      <p class="guide-note">كل التطبيقات مجانية. لو استفدت منها، دعمك بيساعدنا نكمّل ونضيف تطبيقات جديدة.</p>
+      <div class="actions" id="support-links"></div>
+    </section>
+  </main>
+
+  <footer>
+    <p>الحوت · جميع التطبيقات مجانية</p>
+  </footer>
+
+  <script src="config.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
