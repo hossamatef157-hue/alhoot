@@ -183,6 +183,26 @@
         })
         .catch(function (x) { fm.style.color = "#c0392b"; fm.textContent = "فشل الرفع: " + x.message + " (لو انتهت الجلسة سجّل دخول تاني)"; });
     };
+    var il = el("label", "wide", "أيقونة التطبيق: رابط صورة (اختياري، بتظهر بدل الإيموجي)"), ii = el("input");
+    ii.value = a.icon_image || ""; inp.icon_image = ii; il.appendChild(ii); f.appendChild(il);
+    var ifl = el("label", "wide", "أو ارفع صورة الأيقونة مباشرة (PNG مربعة، حتى 2 م.ب)"), ifi = el("input"), im = el("p", "msg wide");
+    ifi.type = "file"; ifi.accept = "image/png,image/jpeg,image/webp"; ifl.appendChild(ifi); f.appendChild(ifl); f.appendChild(im);
+    ifi.onchange = function () {
+      var file = ifi.files[0]; if (!file) return;
+      im.style.color = "#c0392b";
+      if (!inp.id.value.trim()) { im.textContent = "اكتب الـ applicationId الأول."; ifi.value = ""; return; }
+      if (file.size > 2 * 1048576) { im.textContent = "الصورة أكبر من 2 م.ب."; ifi.value = ""; return; }
+      var ext = file.type === "image/jpeg" ? "jpg" : file.type === "image/webp" ? "webp" : "png";
+      var iname = inp.id.value.trim() + "-icon-" + Date.now() + "." + ext;
+      im.style.color = "inherit"; im.textContent = "جاري رفع الأيقونة...";
+      fetch(C.url + "/storage/v1/object/apks/" + encodeURIComponent(iname), { method: "POST", headers: { apikey: C.anonKey, Authorization: "Bearer " + (S && S.t), "x-upsert": "true", "Content-Type": file.type }, body: file })
+        .then(function (r) { if (!r.ok) return r.text().then(function (t) { throw new Error(t); }); })
+        .then(function () {
+          ii.value = C.url + "/storage/v1/object/public/apks/" + encodeURIComponent(iname);
+          im.textContent = "تم رفع الأيقونة ✓ اضغط حفظ عشان تظهر في الموقع.";
+        })
+        .catch(function (x) { im.style.color = "#c0392b"; im.textContent = "فشل رفع الأيقونة: " + x.message + " (ممكن تلصق رابط الصورة في الخانة اللي فوق بدل الرفع)"; });
+    };
     function ta(k, label, v) { var l = el("label", "wide", label), t = el("textarea"); t.rows = 3; t.value = v; inp[k] = t; l.appendChild(t); f.appendChild(l); }
     ta("description", "الوصف", a.description || "");
     ta("notes", "وصف التحديث", a.notes || "");
@@ -194,6 +214,7 @@
       e.preventDefault();
       var row = { published: pc.checked };
       ["id", "name", "tagline", "icon", "color", "version", "size", "updated", "platform", "apk", "description", "notes"].forEach(function (k) { row[k] = inp[k].value.trim(); });
+      row.icon_image = inp.icon_image.value.trim() || null;
       row.version_code = parseInt(inp.version_code.value, 10) || 0; row.sort = parseInt(inp.sort.value, 10) || 0;
       row.screenshots = inp.screenshots.value.split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
       row.links = inp.links.value.split("\n").map(function (s) { var p = s.split("|"); return { label: (p[0] || "").trim(), url: (p.slice(1).join("|") || "").trim() }; }).filter(function (l) { return l.url; });
