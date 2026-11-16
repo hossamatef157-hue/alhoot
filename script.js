@@ -162,6 +162,82 @@
     document.getElementById("support").hidden = false;
   })();
 
+  // ===== الاشتراك بحساب Google =====
+  (function () {
+    var box = document.getElementById("subscribe");
+    if (!useDb || !box) return;
+    var note = document.getElementById("sub-note"), acts = document.getElementById("sub-actions");
+    var KEY = "alhoot_u", INTENT = "alhoot_sub", S = null;
+    function load() { try { S = JSON.parse(localStorage.getItem(KEY)); } catch (e) { S = null; } }
+    function save(s) { S = s; try { s ? localStorage.setItem(KEY, JSON.stringify(s)) : localStorage.removeItem(KEY); } catch (e) {} }
+    function jwt(t) { try { return JSON.parse(atob(t.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))); } catch (e) { return {}; } }
+    function takeHash() {
+      var p = new URLSearchParams(location.hash.slice(1));
+      if (p.get("access_token")) {
+        save({ t: p.get("access_token"), r: p.get("refresh_token"), exp: Date.now() + (+p.get("expires_in") || 3600) * 1000 });
+      }
+      var err = p.get("error_description");
+      if (p.get("access_token") || err) history.replaceState(null, "", location.pathname + location.search);
+      return err;
+    }
+    function token() {
+      if (!S) return Promise.reject(new Error("no session"));
+      if (S.exp - Date.now() > 60000) return Promise.resolve(S.t);
+      if (!S.r) { save(null); return Promise.reject(new Error("expired")); }
+      return fetch(CFG.url + "/auth/v1/token?grant_type=refresh_token", { method: "POST", headers: hdr({ "Content-Type": "application/json" }), body: JSON.stringify({ refresh_token: S.r }) })
+        .then(function (r) { if (!r.ok) throw new Error("expired"); return r.json(); })
+        .then(function (j) { save({ t: j.access_token, r: j.refresh_token, exp: Date.now() + (j.expires_in || 3600) * 1000 }); return S.t; })
+        .catch(function (e) { save(null); throw e; });
+    }
+    function call(path, opt) {
+      return token().then(function (t) {
+        opt = opt || {};
+        opt.headers = Object.assign(hdr({ "Content-Type": "application/json" }), { Authorization: "Bearer " + t });
+        return fetch(CFG.url + "/rest/v1/" + path, opt);
+      });
+    }
+    function google() { location.href = CFG.url + "/auth/v1/authorize?provider=google&redirect_to=" + encodeURIComponent(location.origin + location.pathname); }
+    function btn(label, cls, fn) { var b = el("button", "btn " + cls, label); b.type = "button"; b.addEventListener("click", fn); return b; }
+    function say(t) { note.textContent = t; }
+    function view(state, email) {
+      acts.textContent = ""; box.hidden = false;
+      if (state === "out") {
+        say("اشترك بحساب Google عشان توصلك أخبار التطبيقات الجديدة والتحديثات. بنحفظ إيميلك بس، وتقدر تلغي اشتراكك في أي وقت.");
+        acts.appendChild(btn("🔔 اشترك بحساب Google", "", function () { try { sessionStorage.setItem(INTENT, "1"); } catch (e) {} google(); }));
+      } else if (state === "in") {
+        say("أهلاً " + email + ". اضغط اشتراك عشان توصلك أخبار المنصة.");
+        acts.appendChild(btn("🔔 اشتراك", "", doSub)); acts.appendChild(btn("خروج", "secondary", out));
+      } else {
+        say("✓ أنت مشترك بالإيميل " + email + ". هتوصلك أخبار التطبيقات الجديدة والتحديثات.");
+        acts.appendChild(btn("إلغاء الاشتراك", "secondary", doUnsub)); acts.appendChild(btn("خروج", "secondary", out));
+      }
+    }
+    function out() { save(null); view("out"); }
+    function doSub() {
+      say("جاري الاشتراك...");
+      call("rpc/subscribe", { method: "POST", body: "{}" })
+        .then(function (r) { if (!r.ok) throw new Error(r.status); view("sub", jwt(S.t).email || ""); })
+        .catch(function () { say("تعذّر الاشتراك. حاول مرة تانية."); });
+    }
+    function doUnsub() {
+      say("جاري إلغاء الاشتراك...");
+      call("subscribers?user_id=eq." + encodeURIComponent(jwt(S.t).sub || ""), { method: "DELETE" })
+        .then(function (r) { if (!r.ok) throw new Error(r.status); view("in", jwt(S.t).email || ""); })
+        .catch(function () { say("تعذّر إلغاء الاشتراك. حاول مرة تانية."); });
+    }
+    var authErr = takeHash();
+    load();
+    if (!S) { view("out"); if (authErr) say("تعذّر تسجيل الدخول: " + authErr); return; }
+    token().then(function (t) {
+      return call("subscribers?select=user_id").then(function (r) { return r.ok ? r.json() : []; }).then(function (rows) {
+        var intent = false;
+        try { intent = sessionStorage.getItem(INTENT) === "1"; sessionStorage.removeItem(INTENT); } catch (e) {}
+        var email = jwt(t).email || "";
+        if (rows.length) view("sub", email); else if (intent) doSub(); else view("in", email);
+      });
+    }).catch(function () { view("out"); });
+  })();
+
   search.addEventListener("input", filter);
 
   function loadJson() {

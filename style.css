@@ -174,3 +174,5 @@ footer {
   font-size: .9rem;
 }
 footer p { margin: 0; }
+
+[hidden] { display: none !important; }

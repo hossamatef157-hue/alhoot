@@ -38,7 +38,7 @@
 (function () {
   "use strict";
   var C = window.ALHOOT_CONFIG || {}; C.url = (C.url || "").trim().replace(/\/+$/, "");
-  var root = document.getElementById("root"), S = null, apps = [], daily = [];
+  var root = document.getElementById("root"), S = null, apps = [], daily = [], subs = [];
   try { S = JSON.parse(localStorage.getItem("alhoot_s")); } catch (e) {}
 
   function el(t, c, x) { var e = document.createElement(t); if (c) e.className = c; if (x != null) e.textContent = x; return e; }
@@ -67,7 +67,9 @@
     var em = el("input"); em.type = "email"; em.placeholder = "الإيميل"; em.required = true; em.autocomplete = "username";
     var pw = el("input"); pw.type = "password"; pw.placeholder = "كلمة السر"; pw.required = true; pw.autocomplete = "current-password";
     var b = el("button", "btn", "دخول"); b.type = "submit";
-    f.append(em, pw, b, m);
+    var g = el("button", "btn secondary", "الدخول بحساب Google"); g.type = "button";
+    g.onclick = function () { location.href = C.url + "/auth/v1/authorize?provider=google&redirect_to=" + encodeURIComponent(location.origin + location.pathname); };
+    f.append(em, pw, b, g, m);
     f.onsubmit = function (e) {
       e.preventDefault();
       auth({ email: em.value, password: pw.value }, "password").then(load).catch(function (x) { m.textContent = x.message; });
@@ -78,9 +80,22 @@
   function load() {
     api("admins?select=user_id").then(function (a) {
       if (!a || !a.length) { save(null); return loginView("هذا الحساب ليس أدمن."); }
-      return Promise.all([api("apps?select=*&order=sort.asc"), api("rpc/admin_daily", { method: "POST", body: JSON.stringify({ p_days: 30 }) })])
-        .then(function (r) { apps = r[0] || []; daily = r[1] || []; dash(); });
-    }).catch(function () { save(null); loginView("انتهت الجلسة، سجّل الدخول من جديد."); });
+      return Promise.all([api("apps?select=*&order=sort.asc"), api("rpc/admin_daily", { method: "POST", body: JSON.stringify({ p_days: 30 }) }),
+        api("subscribers?select=email,created_at&order=created_at.desc&limit=1000").catch(function () { return null; })])
+        .then(function (r) { apps = r[0] || []; daily = r[1] || []; subs = r[2]; dash(); });
+    }).catch(function (x) {
+      if (/JWT|expired|invalid|refresh|401/i.test(x.message)) { save(null); loginView("انتهت الجلسة، سجّل الدخول من جديد."); }
+      else errView(x.message);
+    });
+  }
+
+  function errView(msg) {
+    root.textContent = "";
+    var box = el("div", "login"); box.appendChild(el("h1", null, "حصلت مشكلة"));
+    box.appendChild(el("p", "msg", msg));
+    var r = el("button", "btn", "إعادة المحاولة"); r.onclick = load;
+    var o = el("button", "btn secondary", "خروج"); o.onclick = function () { save(null); loginView(); };
+    box.append(r, o); root.appendChild(box);
   }
 
   function dash() {
@@ -99,8 +114,8 @@
     acts.append(add, out); bar.appendChild(acts); root.appendChild(bar);
 
     var st = el("div", "stats");
-    [["إجمالي التحميلات", total], ["آخر 7 أيام", d7], ["آخر 30 يوم", d30], ["التطبيقات", apps.length]].forEach(function (x) {
-      var s = el("div", "stat"); s.append(el("b", null, num(x[1])), el("span", null, x[0])); st.appendChild(s);
+    [["إجمالي التحميلات", total], ["آخر 7 أيام", d7], ["آخر 30 يوم", d30], ["التطبيقات", apps.length], ["المشتركين", subs ? subs.length : "—"]].forEach(function (x) {
+      var s = el("div", "stat"); s.append(el("b", null, typeof x[1] === "number" ? num(x[1]) : x[1]), el("span", null, x[0])); st.appendChild(s);
     });
     root.appendChild(st);
 
@@ -117,11 +132,43 @@
       var td = el("td"), e = el("button", "btn secondary", "تعديل"), x = el("button", "btn secondary", "حذف");
       e.onclick = function () { form(a); };
       x.onclick = function () { if (confirm("حذف " + a.name + " وكل إحصائياته؟")) api("apps?id=eq." + encodeURIComponent(a.id), { method: "DELETE" }).then(load).catch(function (z) { alert(z.message); }); };
-      td.append(e, " ", x); tr.appendChild(td); t.appendChild(tr);
+      var nb = el("button", "btn secondary", "📣 إبلاغ"); nb.onclick = function () { notify(a); };
+      td.append(e, " ", x, " ", nb); tr.appendChild(td); t.appendChild(tr);
     });
     tw.appendChild(t); root.appendChild(tw);
     if (!apps.length) root.appendChild(el("p", "msg", "لسه مفيش تطبيقات. اضغط «+ تطبيق» وضيف أول تطبيق."));
+    subBox();
     licBox();
+  }
+
+  function notify(a) {
+    if (!subs || !subs.length) return alert("مفيش مشتركين لسه.");
+    var site = location.origin + location.pathname.replace(/admin\.html$/, "");
+    var body = "السلام عليكم،\n\nفيه جديد على الحوت: " + a.name + (a.version ? " (الإصدار " + a.version + ")" : "") + "\n" +
+      (a.tagline ? a.tagline + "\n" : "") + (a.notes ? "\n" + a.notes + "\n" : "") +
+      "\nحمّله من هنا:\n" + site + "\n\nلإلغاء الاشتراك: ادخل الموقع واضغط «إلغاء الاشتراك».";
+    var emails = subs.map(function (s) { return s.email; }).join(", ");
+    try { navigator.clipboard.writeText(emails); } catch (e) {}
+    window.open("https://mail.google.com/mail/?view=cm&fs=1&su=" + encodeURIComponent("جديد على الحوت: " + a.name) + "&body=" + encodeURIComponent(body), "_blank");
+    alert("اتنسخ " + subs.length + " إيميل. الصقهم في خانة BCC (نسخة مخفية) في رسالة Gmail اللي اتفتحت، وابعت.\n\nلو الرسالة ما اتفتحتش، اسمح للنوافذ المنبثقة لموقعك.");
+  }
+
+  function subBox() {
+    var h = el("h3", null, "👥 المشتركين" + (subs ? " (" + num(subs.length) + ")" : "")); h.style.marginTop = "24px"; root.appendChild(h);
+    if (subs === null) { root.appendChild(el("p", "msg", "قسم المشتركين مش جاهز: شغّل ملف supabase_update.sql في Supabase مرة واحدة.")); return; }
+    if (!subs.length) { root.appendChild(el("p", "msg", "لسه مفيش مشتركين.")); return; }
+    var acts = el("div", "actions"), cp = el("button", "btn secondary", "نسخ كل الإيميلات");
+    cp.onclick = function () {
+      var txt = subs.map(function (s) { return s.email; }).join(", ");
+      try { navigator.clipboard.writeText(txt).then(function () { cp.textContent = "تم النسخ ✓"; }); } catch (e) { prompt("انسخ الإيميلات:", txt); }
+    };
+    acts.appendChild(cp); root.appendChild(acts);
+    var tw = el("div", "tw"), t = el("table"), hr = el("tr");
+    ["الإيميل", "تاريخ الاشتراك"].forEach(function (x) { hr.appendChild(el("th", null, x)); }); t.appendChild(hr);
+    subs.slice(0, 100).forEach(function (s) {
+      var tr = el("tr"); tr.appendChild(el("td", null, s.email)); tr.appendChild(el("td", null, (s.created_at || "").slice(0, 10))); t.appendChild(tr);
+    });
+    tw.appendChild(t); root.appendChild(tw);
   }
 
   function licBox() {
@@ -173,7 +220,8 @@
       if (file.size > 50 * 1048576) { fm.textContent = "الملف أكبر من 50 م.ب."; fi.value = ""; return; }
       var name = inp.id.value.trim() + "-" + (inp.version_code.value || 0) + ".apk";
       fm.style.color = "inherit"; fm.textContent = "جاري الرفع...";
-      fetch(C.url + "/storage/v1/object/apks/" + encodeURIComponent(name), { method: "POST", headers: { apikey: C.anonKey, Authorization: "Bearer " + (S && S.t), "x-upsert": "true", "Content-Type": "application/vnd.android.package-archive" }, body: file })
+      (S && S.r ? auth({ refresh_token: S.r }, "refresh_token") : Promise.resolve())
+        .then(function () { return fetch(C.url + "/storage/v1/object/apks/" + encodeURIComponent(name), { method: "POST", headers: { apikey: C.anonKey, Authorization: "Bearer " + (S && S.t), "x-upsert": "true", "Content-Type": "application/vnd.android.package-archive" }, body: file }); })
         .then(function (r) { if (!r.ok) return r.text().then(function (t) { throw new Error(t); }); })
         .then(function () {
           inp.apk.value = C.url + "/storage/v1/object/public/apks/" + encodeURIComponent(name);
@@ -182,26 +230,6 @@
           fm.textContent = "تم الرفع ✓ اضغط حفظ عشان يظهر في الموقع.";
         })
         .catch(function (x) { fm.style.color = "#c0392b"; fm.textContent = "فشل الرفع: " + x.message + " (لو انتهت الجلسة سجّل دخول تاني)"; });
-    };
-    var il = el("label", "wide", "أيقونة التطبيق: رابط صورة (اختياري، بتظهر بدل الإيموجي)"), ii = el("input");
-    ii.value = a.icon_image || ""; inp.icon_image = ii; il.appendChild(ii); f.appendChild(il);
-    var ifl = el("label", "wide", "أو ارفع صورة الأيقونة مباشرة (PNG مربعة، حتى 2 م.ب)"), ifi = el("input"), im = el("p", "msg wide");
-    ifi.type = "file"; ifi.accept = "image/png,image/jpeg,image/webp"; ifl.appendChild(ifi); f.appendChild(ifl); f.appendChild(im);
-    ifi.onchange = function () {
-      var file = ifi.files[0]; if (!file) return;
-      im.style.color = "#c0392b";
-      if (!inp.id.value.trim()) { im.textContent = "اكتب الـ applicationId الأول."; ifi.value = ""; return; }
-      if (file.size > 2 * 1048576) { im.textContent = "الصورة أكبر من 2 م.ب."; ifi.value = ""; return; }
-      var ext = file.type === "image/jpeg" ? "jpg" : file.type === "image/webp" ? "webp" : "png";
-      var iname = inp.id.value.trim() + "-icon-" + Date.now() + "." + ext;
-      im.style.color = "inherit"; im.textContent = "جاري رفع الأيقونة...";
-      fetch(C.url + "/storage/v1/object/apks/" + encodeURIComponent(iname), { method: "POST", headers: { apikey: C.anonKey, Authorization: "Bearer " + (S && S.t), "x-upsert": "true", "Content-Type": file.type }, body: file })
-        .then(function (r) { if (!r.ok) return r.text().then(function (t) { throw new Error(t); }); })
-        .then(function () {
-          ii.value = C.url + "/storage/v1/object/public/apks/" + encodeURIComponent(iname);
-          im.textContent = "تم رفع الأيقونة ✓ اضغط حفظ عشان تظهر في الموقع.";
-        })
-        .catch(function (x) { im.style.color = "#c0392b"; im.textContent = "فشل رفع الأيقونة: " + x.message + " (ممكن تلصق رابط الصورة في الخانة اللي فوق بدل الرفع)"; });
     };
     function ta(k, label, v) { var l = el("label", "wide", label), t = el("textarea"); t.rows = 3; t.value = v; inp[k] = t; l.appendChild(t); f.appendChild(l); }
     ta("description", "الوصف", a.description || "");
@@ -214,7 +242,6 @@
       e.preventDefault();
       var row = { published: pc.checked };
       ["id", "name", "tagline", "icon", "color", "version", "size", "updated", "platform", "apk", "description", "notes"].forEach(function (k) { row[k] = inp[k].value.trim(); });
-      row.icon_image = inp.icon_image.value.trim() || null;
       row.version_code = parseInt(inp.version_code.value, 10) || 0; row.sort = parseInt(inp.sort.value, 10) || 0;
       row.screenshots = inp.screenshots.value.split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
       row.links = inp.links.value.split("\n").map(function (s) { var p = s.split("|"); return { label: (p[0] || "").trim(), url: (p.slice(1).join("|") || "").trim() }; }).filter(function (l) { return l.url; });
@@ -224,8 +251,12 @@
     root.appendChild(f); f.scrollIntoView({ behavior: "smooth" });
   }
 
+  var hp = new URLSearchParams(location.hash.slice(1)), hErr = hp.get("error_description");
+  if (hp.get("access_token")) save({ t: hp.get("access_token"), r: hp.get("refresh_token") });
+  if (hp.get("access_token") || hErr) history.replaceState(null, "", location.pathname + location.search);
+
   if (!C.url || !C.anonKey) root.appendChild(el("p", "msg", "اضبط url و anonKey في config.js أولًا."));
-  else if (S && S.t) load(); else loginView();
+  else if (S && S.t) load(); else loginView(hErr ? "تعذّر الدخول: " + hErr : "");
 })();
 </script>
 </body>
